@@ -1,11 +1,11 @@
 """
-Skill gap dashboard: list gaps and improvement suggestions.
+Skill gap dashboard: list gaps and improvement suggestions with study URLs.
 """
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from backend.utils.auth import get_current_user
 from backend.models.user import User
@@ -16,10 +16,47 @@ from backend.models.skill_gap import SkillGapRecord
 router = APIRouter(prefix="/gap", tags=["skill_gap"])
 
 
+class StudyUrls(BaseModel):
+    """Study materials: websites and YouTube URLs for one weakness or suggestion."""
+    websites: list[str] = Field(default_factory=list)
+    youtube: list[str] = Field(default_factory=list)
+
+
+class WeaknessItem(BaseModel):
+    """One weakness with optional study links."""
+    text: str
+    study_urls: StudyUrls = Field(default_factory=lambda: StudyUrls())
+
+
+class ImprovementItem(BaseModel):
+    """One improvement suggestion with optional study links."""
+    text: str
+    study_urls: StudyUrls = Field(default_factory=lambda: StudyUrls())
+
+
+def _normalize_gap_items(raw_list: list) -> list[dict]:
+    """Convert stored gap data (strings or objects) to list of {text, study_urls}."""
+    out = []
+    for x in raw_list or []:
+        if isinstance(x, str):
+            out.append({"text": x, "study_urls": {"websites": [], "youtube": []}})
+        elif isinstance(x, dict):
+            su = x.get("study_urls") or {}
+            if not isinstance(su, dict):
+                su = {}
+            out.append({
+                "text": x.get("text", ""),
+                "study_urls": {"websites": list(su.get("websites") or []), "youtube": list(su.get("youtube") or [])},
+            })
+        else:
+            out.append({"text": "", "study_urls": {"websites": [], "youtube": []}})
+    return out
+
+
 class SkillGapDashboardItem(BaseModel):
     job_submission_id: int
-    weaknesses: list[str]
-    improvement_suggestions: list[str]
+    weaknesses: list[WeaknessItem]
+    improvement_suggestions: list[ImprovementItem]
     resume_risk_claims: list[dict]
     overall_gap_severity: str
     scores_by_area: list[dict] | None
@@ -43,10 +80,12 @@ def get_gap_for_job(
     if not submission:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     gap = submission.skill_gap_summary or {}
+    weaknesses = _normalize_gap_items(gap.get("weaknesses", []))
+    improvement_suggestions = _normalize_gap_items(gap.get("improvement_suggestions", []))
     return SkillGapDashboardItem(
         job_submission_id=submission.id,
-        weaknesses=gap.get("weaknesses", []),
-        improvement_suggestions=gap.get("improvement_suggestions", []),
+        weaknesses=[WeaknessItem(**w) for w in weaknesses],
+        improvement_suggestions=[ImprovementItem(**i) for i in improvement_suggestions],
         resume_risk_claims=gap.get("resume_risk_claims", []),
         overall_gap_severity=gap.get("overall_gap_severity", "medium"),
         scores_by_area=submission.evaluation_result.get("scores") if submission.evaluation_result else None,
@@ -60,15 +99,19 @@ def list_gaps(
 ):
     """List all skill gap records for the current user."""
     records = db.query(SkillGapRecord).filter(SkillGapRecord.user_id == current_user.id).order_by(SkillGapRecord.created_at.desc()).all()
-    items = [
-        SkillGapDashboardItem(
-            job_submission_id=r.job_submission_id or 0,
-            weaknesses=(r.gap_summary or {}).get("weaknesses", []),
-            improvement_suggestions=(r.gap_summary or {}).get("improvement_suggestions", []),
-            resume_risk_claims=(r.gap_summary or {}).get("resume_risk_claims", []),
-            overall_gap_severity=(r.gap_summary or {}).get("overall_gap_severity", "medium"),
-            scores_by_area=r.scores_by_area,
+    items = []
+    for r in records:
+        gap = r.gap_summary or {}
+        weaknesses = _normalize_gap_items(gap.get("weaknesses", []))
+        improvement_suggestions = _normalize_gap_items(gap.get("improvement_suggestions", []))
+        items.append(
+            SkillGapDashboardItem(
+                job_submission_id=r.job_submission_id or 0,
+                weaknesses=[WeaknessItem(**w) for w in weaknesses],
+                improvement_suggestions=[ImprovementItem(**i) for i in improvement_suggestions],
+                resume_risk_claims=gap.get("resume_risk_claims", []),
+                overall_gap_severity=gap.get("overall_gap_severity", "medium"),
+                scores_by_area=r.scores_by_area,
+            )
         )
-        for r in records
-    ]
     return SkillGapDashboardResponse(items=items)

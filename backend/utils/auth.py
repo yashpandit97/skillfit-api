@@ -44,3 +44,18 @@ def get_current_user(
     if not user or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found or inactive")
     return user
+
+
+def get_user_from_token(token: str, db: Session) -> User:
+    """Resolve User from JWT token string (e.g. for WebSocket). Strips 'Bearer ' if present."""
+    if not token or not isinstance(token, str):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+    token = token.strip()
+    if token.lower().startswith("bearer "):
+        token = token[7:].strip()
+    payload = decode_token(token)
+    user_id = int(payload.get("sub", 0))
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user or not user.is_active:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found or inactive")
+    return user

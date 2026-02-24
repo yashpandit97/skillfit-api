@@ -1,12 +1,14 @@
 """
 Skill Gap Analysis Node: synthesize weaknesses, improvements, and resume risks.
 Quality: actionable, specific, and aligned with yes/no concept gaps.
+Includes study URLs (websites + YouTube) for each weakness and improvement suggestion.
 """
 import logging
 import json
 from backend.routers.graph.state import ResumeWorkflowState
 from backend.services.ollama_llm_service import get_llm_service
 from backend.routers.graph.schemas import SkillGapSchema
+from backend.utils.json_extract import extract_json_from_llm_response
 
 logger = logging.getLogger(__name__)
 
@@ -14,12 +16,17 @@ logger = logging.getLogger(__name__)
 SKILL_GAP_SYSTEM = """You are an expert career coach and technical interviewer. Based on a candidate's evaluation (from their yes/no concept checklist) and the job requirements, you produce a structured gap analysis that will guide resume building and preparation.
 
 Output a JSON object with:
-- "weaknesses": list of strings. Specific gaps (e.g. "Limited experience with distributed systems", "No demonstrated Docker/containers"). Reference the concepts they marked "no" or low-scoring areas. 3–8 items. Be constructive, not harsh.
-- "improvement_suggestions": list of strings. Concrete next steps (e.g. "Complete a small project using Docker", "Review database indexing and query optimization"). 3–6 items. Prioritize by impact for this role.
-- "resume_risk_claims": list of objects, each with "claim" (string) and "risk" (string). These are things the candidate might be tempted to overstate on a resume, with the risk of getting caught in an interview. Example: {"claim": "Led system redesign", "risk": "No measurable impact or scope provided"}. 0–5 items. Only include real risks given their answers.
-- "overall_gap_severity": exactly one of "low", "medium", "high". "low" = mostly aligned, few gaps. "medium" = several gaps but addressable. "high" = major misalignment or many critical gaps.
+- "weaknesses": list of objects. Each object has "text" (string) and "study_urls" (object with "websites" and "youtube" arrays). "text" = specific gap (e.g. "Limited experience with distributed systems"). "study_urls.websites" = 1–2 high-quality article or documentation URLs to learn that topic. "study_urls.youtube" = 1–2 YouTube SEARCH URLs only (see rule below). Use real, well-known learning sites (e.g. MDN, official docs, freeCodeCamp, Khan Academy, Real Python). 3–8 weakness items. Be constructive.
+- "improvement_suggestions": list of objects. Each has "text" (string) and "study_urls" (object with "websites", "youtube"). "text" = concrete next step. Same URL rules: 1–2 websites, 1–2 YouTube search URLs per item. 3–6 items. Prioritize by impact.
+- "resume_risk_claims": list of objects, each with "claim" (string) and "risk" (string). Things the candidate might overstate, with interview risk. 0–5 items.
+- "overall_gap_severity": exactly one of "low", "medium", "high".
 
-Use the evaluation summary and per-category scores. Do not invent concepts; refer to the job requirements and the concepts from the checklist. Output only valid JSON; no markdown or code fences."""
+IMPORTANT – YouTube URLs: Do NOT use specific video URLs (e.g. youtube.com/watch?v=...). They often break when videos are removed. Use ONLY YouTube search URLs so the user always gets current results. Format: https://www.youtube.com/results?search_query=TOPIC where TOPIC is 2–4 words (e.g. "docker tutorial", "distributed systems explained"). Replace spaces with + in the query.
+
+Example weakness item: {"text": "No demonstrated Docker/containers", "study_urls": {"websites": ["https://docs.docker.com/get-started/"], "youtube": ["https://www.youtube.com/results?search_query=docker+tutorial"]}}
+Example improvement item: {"text": "Complete a small project using Docker", "study_urls": {"websites": ["https://docs.docker.com/"], "youtube": ["https://www.youtube.com/results?search_query=docker+beginner+project"]}}
+
+Use the evaluation summary and per-category scores. Do not invent concepts. Output only valid JSON; no markdown or code fences."""
 
 
 def skill_gap_analysis_node(state: ResumeWorkflowState) -> dict:
@@ -41,15 +48,40 @@ def skill_gap_analysis_node(state: ResumeWorkflowState) -> dict:
         f"Evaluation (from yes/no concept checklist):\n{json.dumps(evaluation, indent=2)}\n\n"
         f"Job requirements (for context):\n{json.dumps(extracted, indent=2)}"
     )
+    def _normalize_item(x):  # str -> {text, study_urls}; dict -> ensure study_urls
+        if isinstance(x, str):
+            return {"text": x, "study_urls": {"websites": [], "youtube": []}}
+        if isinstance(x, dict):
+            su = x.get("study_urls")
+            if not isinstance(su, dict):
+                su = {}
+            return {
+                "text": x.get("text", ""),
+                "study_urls": {
+                    "websites": list(su.get("websites", [])) if isinstance(su.get("websites"), list) else [],
+                    "youtube": list(su.get("youtube", [])) if isinstance(su.get("youtube"), list) else [],
+                },
+            }
+        return {"text": "", "study_urls": {"websites": [], "youtube": []}}
+
     try:
-        result = llm.invoke_structured(
-            SKILL_GAP_SYSTEM,
+        raw = llm.invoke(
+            SKILL_GAP_SYSTEM + "\n\nRespond with a single JSON object only. No markdown.",
             user,
-            schema=SkillGapSchema,
             stage="skill_gap_analysis",
         )
+        data = extract_json_from_llm_response(raw)
+        # Accept both list-of-strings and list-of-objects from LLM
+        data.setdefault("weaknesses", [])
+        data.setdefault("improvement_suggestions", [])
+        data["weaknesses"] = [_normalize_item(x) for x in data["weaknesses"]]
+        data["improvement_suggestions"] = [_normalize_item(x) for x in data["improvement_suggestions"]]
+        data.setdefault("resume_risk_claims", [])
+        data.setdefault("overall_gap_severity", "medium")
+        result = SkillGapSchema.model_validate(data)
+        summary = result.model_dump()
         return {
-            "skill_gap_summary": result.model_dump(),
+            "skill_gap_summary": summary,
             "gap_validation_error": None,
             "current_node": "skill_gap_analysis",
         }

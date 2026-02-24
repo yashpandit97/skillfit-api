@@ -8,14 +8,12 @@ from backend.routers.graph.nodes.skill_gap_analysis import skill_gap_analysis_no
 
 
 def test_skill_gap_analysis_aggregates_result(mock_llm_service):
-    """Gap analysis returns weaknesses, suggestions, resume_risk_claims, severity."""
-    mock_llm_service.invoke_structured.return_value = MagicMock(
-        model_dump=lambda: {
-            "weaknesses": ["Weak in testing"],
-            "improvement_suggestions": ["Learn pytest"],
-            "resume_risk_claims": [{"claim": "Led projects", "risk": "No metrics"}],
-            "overall_gap_severity": "medium",
-        }
+    """Gap analysis returns weaknesses, suggestions, resume_risk_claims, severity and study_urls."""
+    mock_llm_service.invoke.return_value = (
+        '{"weaknesses": [{"text": "Weak in testing", "study_urls": {"websites": ["https://example.com"], "youtube": []}}], '
+        '"improvement_suggestions": [{"text": "Learn pytest", "study_urls": {"websites": [], "youtube": ["https://youtube.com/watch?v=1"]}}], '
+        '"resume_risk_claims": [{"claim": "Led projects", "risk": "No metrics"}], '
+        '"overall_gap_severity": "medium"}'
     )
     with patch("backend.routers.graph.nodes.skill_gap_analysis.get_llm_service", return_value=mock_llm_service):
         state: ResumeWorkflowState = {
@@ -28,6 +26,9 @@ def test_skill_gap_analysis_aggregates_result(mock_llm_service):
     summary = out["skill_gap_summary"]
     assert "weaknesses" in summary
     assert "overall_gap_severity" in summary
+    assert summary["weaknesses"][0]["text"] == "Weak in testing"
+    assert summary["weaknesses"][0]["study_urls"]["websites"] == ["https://example.com"]
+    assert summary["improvement_suggestions"][0]["study_urls"]["youtube"] == ["https://youtube.com/watch?v=1"]
 
 
 def test_skill_gap_analysis_no_evaluation():

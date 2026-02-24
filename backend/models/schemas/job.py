@@ -31,6 +31,7 @@ class QuestionnaireResponse(BaseModel):
     questions: list[QuestionnaireItem]
     current_stage: int = 1  # 1-5
     total_stages: int = 5
+    progress_pct: int = 0  # 0–100 for progress bar
     ready: bool = True  # False when submission exists but questionnaire not yet generated
 
 
@@ -46,6 +47,8 @@ class StageAnswersRequest(BaseModel):
 class StageAnswersResponse(BaseModel):
     next_stage_questions: list[QuestionnaireItem] = Field(default_factory=list)
     current_stage: int = 1
+    total_stages: int = 1
+    progress_pct: int = 0  # 0–100 for progress bar
     done: bool = False
     message: str = ""
 

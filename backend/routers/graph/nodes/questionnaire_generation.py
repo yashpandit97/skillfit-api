@@ -7,6 +7,7 @@ import logging
 import json
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Callable
 
 from backend.routers.graph.state import ResumeWorkflowState
 from backend.services.ollama_llm_service import get_llm_service
@@ -17,8 +18,8 @@ logger = logging.getLogger(__name__)
 # Use sectioned flow when JD is longer than this (chars) to avoid huge prompts and speed up stage 1
 MIN_JD_LENGTH_FOR_SECTIONS = 1000
 # Split JD into sections of this many characters each (break at sentence/paragraph when possible)
-SECTION_CHAR_SIZE = 500
-MAX_QUESTIONS_PER_SECTION = 6
+SECTION_CHAR_SIZE = 1000
+MAX_QUESTIONS_PER_SECTION = 5
 
 
 QUESTIONNAIRE_SYSTEM = """You are an expert technical recruiter and career coach. Your task is to produce a concise, high-value concept checklist for evaluating a candidate's fit for a role.
@@ -240,11 +241,27 @@ def _parse_question_line(line: str, default_id: str = "q0"):
         return None
 
 
-def _stream_ndjson_questions(system_prompt: str, user_prompt: str, stage_name: str):
-    """Yield question dicts from LLM NDJSON stream. Tolerates markdown, single array, or NDJSON."""
+def _stream_ndjson_questions(
+    system_prompt: str,
+    user_prompt: str,
+    stage_name: str,
+    progress_callback: Callable[[str, int], None] | None = None,
+):
+    """Yield question dicts from LLM NDJSON stream. Tolerates markdown, single array, or NDJSON.
+    If progress_callback(phase, progress_pct) is provided, calls it during streaming (phase='questionnaire', pct 30-100)."""
     llm = get_llm_service()
     buffer = ""
+    chunk_count = 0
+    PROGRESS_START = 30
+    PROGRESS_END = 95
+    CHUNKS_PER_PCT = 2  # every N chunks bump progress (smaller so stage 2+ sees updates sooner)
+    if progress_callback:
+        progress_callback("questionnaire", PROGRESS_START)
     for chunk in llm.stream(system_prompt, user_prompt, stage=stage_name):
+        chunk_count += 1
+        if progress_callback and (chunk_count <= 1 or chunk_count % CHUNKS_PER_PCT == 0):
+            pct = min(PROGRESS_END, PROGRESS_START + chunk_count // CHUNKS_PER_PCT)
+            progress_callback("questionnaire", pct)
         buffer += chunk
         while "\n" in buffer:
             line, buffer = buffer.split("\n", 1)
@@ -303,6 +320,8 @@ def _stream_ndjson_questions(system_prompt: str, user_prompt: str, stage_name: s
                             break
                     except (json.JSONDecodeError, ValueError):
                         continue
+    if progress_callback:
+        progress_callback("questionnaire", 100)
 
 
 def _stage_1_sectioned(extracted_skills: dict, description_text: str) -> list[dict]:
@@ -341,12 +360,21 @@ def _stage_1_sectioned(extracted_skills: dict, description_text: str) -> list[di
     return collected[:MAX_QUESTIONS_STAGE_1]
 
 
-def stream_questionnaire_stage_1(extracted_skills: dict, description_text: str = ""):
-    """Generate first batch of questions (stage 1). For long JDs, split into sections and run in parallel; else single stream."""
+def stream_questionnaire_stage_1(
+    extracted_skills: dict,
+    description_text: str = "",
+    progress_callback: Callable[[str, int], None] | None = None,
+):
+    """Generate first batch of questions (stage 1). For long JDs, split into sections and run in parallel; else single stream.
+    Optional progress_callback(phase, progress_pct) for LLM generation progress (e.g. WebSocket)."""
     jd = (description_text or "").strip()
     if len(jd) >= MIN_JD_LENGTH_FOR_SECTIONS:
         logger.info("Using sectioned stage 1 (JD length=%s)", len(jd))
+        if progress_callback:
+            progress_callback("questionnaire", 30)
         sectioned = _stage_1_sectioned(extracted_skills, jd)
+        if progress_callback:
+            progress_callback("questionnaire", 100)
         for i, q in enumerate(sectioned, start=1):
             yield {**q, "id": f"q{i}", "stage": 1}
         if len(sectioned) >= MIN_QUESTIONS_STAGE_1:
@@ -358,6 +386,7 @@ def stream_questionnaire_stage_1(extracted_skills: dict, description_text: str =
         STAGE_1_NDJSON_SYSTEM,
         user,
         stage_name="questionnaire_stage_1",
+        progress_callback=progress_callback,
     )):
         qid = start_id + i
         yield {**q_dict, "id": f"q{qid}", "stage": 1}
@@ -465,14 +494,18 @@ def generate_next_stage_structured(
         questions_data = extract_ndjson_questions_from_llm_response(raw)
         if not questions_data:
             from backend.utils.json_extract import extract_json_from_llm_response
-            data = extract_json_from_llm_response(raw)
-            if isinstance(data, list):
-                questions_data = [q for q in data if isinstance(q, dict) and q.get("concept")]
-            elif isinstance(data, dict):
-                if "questions" in data and isinstance(data["questions"], list):
-                    questions_data = data["questions"]
-                elif data.get("concept"):
-                    questions_data = [data]
+            try:
+                data = extract_json_from_llm_response(raw)
+                if isinstance(data, list):
+                    questions_data = [q for q in data if isinstance(q, dict) and q.get("concept")]
+                elif isinstance(data, dict):
+                    if "questions" in data and isinstance(data["questions"], list):
+                        questions_data = data["questions"]
+                    elif data.get("concept"):
+                        questions_data = [data]
+            except (json.JSONDecodeError, ValueError) as e:
+                logger.warning("Structured fallback: LLM response had no valid JSON: %s", e)
+                questions_data = []
         validated = [QuestionnaireItemSchema.model_validate(q) for q in questions_data if isinstance(q, dict) and q.get("concept")]
         result = QuestionnaireSchema(questions=validated)
         out = []
@@ -514,13 +547,17 @@ def _generate_last_resort_next_stage(
     from backend.utils.json_extract import extract_ndjson_questions_from_llm_response, extract_json_from_llm_response
     questions_data = extract_ndjson_questions_from_llm_response(raw)
     if not questions_data:
-        data = extract_json_from_llm_response(raw)
-        if isinstance(data, list):
-            questions_data = [q for q in data if isinstance(q, dict) and q.get("concept")]
-        elif isinstance(data, dict) and data.get("concept"):
-            questions_data = [data]
-        elif isinstance(data, dict) and isinstance(data.get("questions"), list):
-            questions_data = data["questions"]
+        try:
+            data = extract_json_from_llm_response(raw)
+            if isinstance(data, list):
+                questions_data = [q for q in data if isinstance(q, dict) and q.get("concept")]
+            elif isinstance(data, dict) and data.get("concept"):
+                questions_data = [data]
+            elif isinstance(data, dict) and isinstance(data.get("questions"), list):
+                questions_data = data["questions"]
+        except (json.JSONDecodeError, ValueError) as e:
+            logger.warning("Last-resort next stage: LLM response had no valid JSON: %s", e)
+            questions_data = []
     out = []
     for i, q in enumerate(questions_data[:3]):
         if not isinstance(q, dict) or not q.get("concept"):
@@ -538,8 +575,10 @@ def stream_questionnaire_stage_next(
     next_stage: int,
     previous_all_questions: list,
     current_stage_yes_questions: list,
+    progress_callback: Callable[[str, int], None] | None = None,
 ):
-    """Generate next batch of questions from current stage's YES answers only. LLM decides count (2–10). Yields question dicts with stage=next_stage. No repeats from previous stages."""
+    """Generate next batch of questions from current stage's YES answers only. LLM decides count (2–10). Yields question dicts with stage=next_stage. No repeats from previous stages.
+    Optional progress_callback(phase, progress_pct) for LLM generation progress."""
     next_id_start = len(previous_all_questions) + 1
     previous_concepts = [str(q.get("concept", "")).strip() for q in previous_all_questions if q.get("concept")]
     previous_concepts_line = "Concepts already asked (do NOT repeat any of these): " + ", ".join(previous_concepts) if previous_concepts else ""
@@ -553,6 +592,7 @@ def stream_questionnaire_stage_next(
         _stage_next_from_yes_ndjson_system(next_id_start, current_stage_yes_questions),
         user,
         stage_name=f"questionnaire_stage_{next_stage}",
+        progress_callback=progress_callback,
     )):
         concept = q_dict.get("concept") or ""
         if not _is_duplicate_concept(concept, previous_concepts):

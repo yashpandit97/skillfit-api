@@ -32,17 +32,17 @@ def _normalize_category(v: str) -> str:
 
 
 class QuestionnaireItemSchema(BaseModel):
-    id: str
+    id: str = "q0"  # Optional from LLM; we assign correct id when building output
     concept: str  # Short name of skill/concept
-    category: str  # fundamentals, tools, advanced_concepts, real_world, metrics_impact
+    category: str = "fundamentals"  # fundamentals, tools, advanced_concepts, real_world, metrics_impact
     description: Optional[str] = None  # One-line clarification if needed
 
     @field_validator("id", mode="before")
     @classmethod
     def coerce_id(cls, v: Any) -> str:
-        if v is None:
+        if v is None or v == "":
             return "q0"
-        return str(v).strip()
+        return str(v).strip() or "q0"
 
     @field_validator("concept", mode="before")
     @classmethod
@@ -91,8 +91,24 @@ class ResumeRiskClaimSchema(BaseModel):
     risk: str
 
 
+class StudyUrlsSchema(BaseModel):
+    """Study materials for one weakness or improvement suggestion."""
+    websites: list[str] = Field(default_factory=list, description="1-2 quality article or documentation URLs")
+    youtube: list[str] = Field(default_factory=list, description="1-2 YouTube search URLs (results?search_query=...) so links stay valid")
+
+
+class WeaknessItemSchema(BaseModel):
+    text: str = Field(description="Short description of the gap")
+    study_urls: StudyUrlsSchema | None = Field(default_factory=lambda: StudyUrlsSchema(), description="Learning resources")
+
+
+class ImprovementItemSchema(BaseModel):
+    text: str = Field(description="Concrete next step")
+    study_urls: StudyUrlsSchema | None = Field(default_factory=lambda: StudyUrlsSchema(), description="Learning resources")
+
+
 class SkillGapSchema(BaseModel):
-    weaknesses: list[str] = Field(default_factory=list)
-    improvement_suggestions: list[str] = Field(default_factory=list)
+    weaknesses: list[WeaknessItemSchema] = Field(default_factory=list)
+    improvement_suggestions: list[ImprovementItemSchema] = Field(default_factory=list)
     resume_risk_claims: list[ResumeRiskClaimSchema] = Field(default_factory=list)
     overall_gap_severity: str = "medium"
