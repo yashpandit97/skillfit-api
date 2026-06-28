@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   backend:
     build:
@@ -8,11 +6,14 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=postgresql://postgres:postgres@db:5432/resume_intel
-      - REDIS_URL=redis://redis:6379/0
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
-      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.5-flash}
-      - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/resume_intel
+      REDIS_URL: redis://redis:6379/0
+      FRONTEND_URL: http://localhost:8080
+      RESUME_OUTPUT_DIR: /app/generated_resumes
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-skillfit-e06fe}
     depends_on:
       db:
         condition: service_healthy
@@ -23,10 +24,10 @@ services:
 
   frontend:
     build:
-      context: .
-      dockerfile: Dockerfile.frontend
+      context: ../../skillfit-ui/skillfit-ui
+      dockerfile: Dockerfile
     ports:
-      - "80:80"
+      - "8080:80"
     depends_on:
       - backend
 

@@ -35,10 +35,9 @@ async def lifespan(app: FastAPI):
     from backend.db.session import engine
     from backend.db.session import Base
     from backend.db.session import ensure_current_stage_column, ensure_company_name_column, ensure_resume_version_pdf_column, ensure_fit_report_columns, ensure_firebase_uid_column, ensure_firebase_uid_column
-    # Create tables if using SQLite (local dev); safe no-op if they exist
-    if get_settings().database_url.startswith("sqlite"):
-        from backend.models import UserProfile, ShareToken  # ensure tables registered
-        Base.metadata.create_all(bind=engine)
+    # Create tables on startup (SQLite local dev, PostgreSQL in Docker); safe no-op if they exist
+    import backend.models  # noqa: F401 — register all models
+    Base.metadata.create_all(bind=engine)
     ensure_current_stage_column(engine)
     ensure_company_name_column(engine)
     ensure_resume_version_pdf_column(engine)
