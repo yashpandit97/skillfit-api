@@ -1,0 +1,16 @@
+# Local dev only — exposes ports on the host. Not for Coolify.
+# Usage: docker compose -f docker-compose.yml -f docker-compose.local.yml up --build
+services:
+  backend:
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./generated_resumes:/app/generated_resumes
+
+  db:
+    ports:
+      - "5432:5432"
+
+  redis:
+    ports:
+      - "6379:6379"
