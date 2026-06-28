@@ -10,7 +10,8 @@ services:
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/resume_intel
       - REDIS_URL=redis://redis:6379/0
-      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.2}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.5-flash}
       - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
     depends_on:
       db:
@@ -19,11 +20,6 @@ services:
         condition: service_started
     volumes:
       - ./generated_resumes:/app/generated_resumes
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    # Optional: use host Ollama for LLM
-    # environment:
-    #   - OLLAMA_BASE_URL=http://host.docker.internal:11434
 
   frontend:
     build:

@@ -9,8 +9,10 @@ class ResumeWorkflowState(TypedDict, total=False):
     # Input
     job_title: Optional[str]
     job_description_raw: Optional[str]
+    company_name: Optional[str]
     user_id: Optional[int]
     job_submission_id: Optional[int]
+    user_baseline: Optional[dict[str, Any]]  # From UserProfile: skills, experience_summary, baseline_resume_json
 
     # After input normalization
     normalized_description: Optional[str]

@@ -13,6 +13,7 @@ class ResumeVersion(Base):
     job_submission_id = Column(Integer, ForeignKey("job_submissions.id"), nullable=True, index=True)
     content_json = Column(Text, nullable=True)  # Structured resume data
     file_path = Column(String(1024), nullable=True)  # Stored .docx path if saved
+    file_path_pdf = Column(String(1024), nullable=True)  # Optional PDF path
     version = Column(Integer, default=1)
     created_at = Column(DateTime, default=datetime.utcnow)
 

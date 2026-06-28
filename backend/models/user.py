@@ -10,6 +10,7 @@ class User(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String(255), unique=True, index=True, nullable=False)
+    firebase_uid = Column(String(128), unique=True, index=True, nullable=True)
     hashed_password = Column(String(255), nullable=False)
     full_name = Column(String(255), nullable=True)
     is_active = Column(Boolean, default=True)
@@ -19,3 +20,4 @@ class User(Base):
     job_submissions = relationship("JobSubmission", back_populates="user")
     resume_versions = relationship("ResumeVersion", back_populates="user")
     skill_gap_records = relationship("SkillGapRecord", back_populates="user")
+    profile = relationship("UserProfile", back_populates="user", uselist=False)

@@ -4,7 +4,7 @@ Quality-focused: specific responsibilities, skills, and level.
 """
 import logging
 from backend.routers.graph.state import ResumeWorkflowState
-from backend.services.ollama_llm_service import get_llm_service
+from backend.services.gemini_llm_service import get_llm_service
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +28,10 @@ def jd_expansion_node(state: ResumeWorkflowState) -> dict:
         return {"expanded_description": None, "current_node": "jd_expansion"}
 
     llm = get_llm_service()
+    company = (state.get("company_name") or "").strip()
     user = f"Job title to expand into a full job description paragraph:\n\n{normalized}"
+    if company:
+        user = f"Company context: {company}. Align tone and requirements with this context.\n\n" + user
     try:
         expanded = llm.invoke(JD_EXPANSION_SYSTEM, user, stage="jd_expansion")
         expanded = expanded.strip()

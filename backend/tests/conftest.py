@@ -1,15 +1,15 @@
 """
-Pytest fixtures: mock Ollama service for deterministic tests.
+Pytest fixtures: mock Gemini service for deterministic tests.
 """
 import pytest
 from unittest.mock import MagicMock
-from backend.services.ollama_llm_service import OllamaLLMService
+from backend.services.gemini_llm_service import GeminiLLMService
 
 
 @pytest.fixture
 def mock_llm_service():
     """Replace LLM calls with deterministic JSON responses."""
-    service = MagicMock(spec=OllamaLLMService)
+    service = MagicMock(spec=GeminiLLMService)
     service.invoke.return_value = '{"required_skills": ["Python"], "required_tools": ["Git"], "concepts": ["OOP"], "responsibilities": ["Develop"], "experience_level": "mid", "ats_keywords": ["Python", "API"]}'
     service.invoke_structured.return_value = MagicMock(
         model_dump=lambda: {

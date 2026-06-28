@@ -4,7 +4,7 @@ Quality: concrete skills and concepts suitable for yes/no concept checklist.
 """
 import logging
 from backend.routers.graph.state import ResumeWorkflowState
-from backend.services.ollama_llm_service import get_llm_service
+from backend.services.gemini_llm_service import get_llm_service
 from backend.routers.graph.schemas import ExtractedSkills
 
 logger = logging.getLogger(__name__)
@@ -49,7 +49,10 @@ def skill_extraction_node(state: ResumeWorkflowState) -> dict:
         }
 
     llm = get_llm_service()
+    company = (state.get("company_name") or "").strip()
     user = f"Job description (read fully for role level, must-haves, domain, and responsibilities):\n\n{description}"
+    if company:
+        user = f"Company context: {company}. Emphasize company values and role level in your extraction.\n\n" + user
     try:
         result = llm.invoke_structured(
             SKILL_EXTRACTION_SYSTEM,

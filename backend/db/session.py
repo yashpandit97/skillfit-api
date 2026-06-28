@@ -62,3 +62,60 @@ def ensure_current_stage_column(eng):
         else:
             conn.execute(text("ALTER TABLE job_submissions ADD COLUMN IF NOT EXISTS current_stage INTEGER NOT NULL DEFAULT 1"))
             conn.commit()
+
+
+def ensure_company_name_column(eng):
+    """Add company_name to job_submissions if missing."""
+    with eng.connect() as conn:
+        if eng.url.drivername == "sqlite":
+            r = conn.execute(text("SELECT 1 FROM pragma_table_info('job_submissions') WHERE name = 'company_name'"))
+            if r.scalar() is None:
+                conn.execute(text("ALTER TABLE job_submissions ADD COLUMN company_name VARCHAR(255)"))
+                conn.commit()
+        else:
+            conn.execute(text("ALTER TABLE job_submissions ADD COLUMN IF NOT EXISTS company_name VARCHAR(255)"))
+            conn.commit()
+
+
+def ensure_resume_version_pdf_column(eng):
+    """Add file_path_pdf to resume_versions if missing."""
+    with eng.connect() as conn:
+        if eng.url.drivername == "sqlite":
+            r = conn.execute(text("SELECT 1 FROM pragma_table_info('resume_versions') WHERE name = 'file_path_pdf'"))
+            if r.scalar() is None:
+                conn.execute(text("ALTER TABLE resume_versions ADD COLUMN file_path_pdf VARCHAR(1024)"))
+                conn.commit()
+        else:
+            conn.execute(text("ALTER TABLE resume_versions ADD COLUMN IF NOT EXISTS file_path_pdf VARCHAR(1024)"))
+            conn.commit()
+
+
+def ensure_fit_report_columns(eng):
+    """Add fit_report and workflow_mode to job_submissions if missing."""
+    with eng.connect() as conn:
+        if eng.url.drivername == "sqlite":
+            for col, ddl in (
+                ("fit_report", "ALTER TABLE job_submissions ADD COLUMN fit_report JSON"),
+                ("workflow_mode", "ALTER TABLE job_submissions ADD COLUMN workflow_mode VARCHAR(50)"),
+            ):
+                r = conn.execute(text(f"SELECT 1 FROM pragma_table_info('job_submissions') WHERE name = '{col}'"))
+                if r.scalar() is None:
+                    conn.execute(text(ddl))
+                    conn.commit()
+        else:
+            conn.execute(text("ALTER TABLE job_submissions ADD COLUMN IF NOT EXISTS fit_report JSON"))
+            conn.execute(text("ALTER TABLE job_submissions ADD COLUMN IF NOT EXISTS workflow_mode VARCHAR(50)"))
+            conn.commit()
+
+
+def ensure_firebase_uid_column(eng):
+    """Add firebase_uid to users if missing."""
+    with eng.connect() as conn:
+        if eng.url.drivername == "sqlite":
+            r = conn.execute(text("SELECT 1 FROM pragma_table_info('users') WHERE name = 'firebase_uid'"))
+            if r.scalar() is None:
+                conn.execute(text("ALTER TABLE users ADD COLUMN firebase_uid VARCHAR(128)"))
+                conn.commit()
+        else:
+            conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS firebase_uid VARCHAR(128)"))
+            conn.commit()

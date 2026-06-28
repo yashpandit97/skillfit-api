@@ -15,7 +15,11 @@ if __name__ == "__main__":
     uvicorn.run(
         "backend.main:app",
         host="0.0.0.0",
+<<<<<<< HEAD
         port=8000,
+=======
+        port=8001,
+>>>>>>> 1aa7648 (deployment changes + bug fixes)
         reload=True,
         reload_dirs=[str(root)],
     )

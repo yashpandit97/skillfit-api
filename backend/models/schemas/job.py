@@ -5,6 +5,7 @@ from typing import Optional
 class JobInputRequest(BaseModel):
     job_title: Optional[str] = None
     job_description: Optional[str] = None
+    company_name: Optional[str] = None
 
     def has_full_jd(self) -> bool:
         return bool(self.job_description and len(self.job_description.strip()) > 50)
@@ -35,13 +36,16 @@ class QuestionnaireResponse(BaseModel):
     ready: bool = True  # False when submission exists but questionnaire not yet generated
 
 
+VALID_ANSWER_VALUES = {"yes", "no", "a_bit"}
+
+
 class UserAnswersPayload(BaseModel):
-    answers: dict[str, str]  # question_id -> "yes" | "no" only
+    answers: dict[str, str]  # question_id -> "yes" | "no" | "a_bit"
 
 
 class StageAnswersRequest(BaseModel):
     stage: int  # 1-5
-    answers: dict[str, str]  # question_id -> "yes" | "no" for this stage only
+    answers: dict[str, str]  # question_id -> "yes" | "no" | "a_bit" for this stage only
 
 
 class StageAnswersResponse(BaseModel):
@@ -66,3 +70,54 @@ class EvaluationResultResponse(BaseModel):
     overall_score: Optional[int] = None
     summary: Optional[str] = None
     concepts_to_prepare: Optional[list[str]] = None
+
+
+class JobSubmissionListItem(BaseModel):
+    id: int
+    job_title: Optional[str] = None
+    company_name: Optional[str] = None
+    status: str
+    workflow_mode: Optional[str] = None
+    created_at: str
+
+
+class FitReportItemResponse(BaseModel):
+    topic: str
+    detail: str
+    study_urls: list[str] = Field(default_factory=list)
+
+
+class FitReportData(BaseModel):
+    overall_fit_score: int
+    role_readiness_summary: str
+    strengths: list[str] = Field(default_factory=list)
+    gaps: list[str] = Field(default_factory=list)
+    preparation_plan: list[FitReportItemResponse] = Field(default_factory=list)
+    ats_keywords_matched: list[str] = Field(default_factory=list)
+    ats_keywords_missing: list[str] = Field(default_factory=list)
+
+
+class FitReportResponse(BaseModel):
+    job_submission_id: int
+    job_title: Optional[str] = None
+    company_name: Optional[str] = None
+    status: str
+    fit_report: FitReportData
+
+
+class JobListResponse(BaseModel):
+    items: list[JobSubmissionListItem]
+
+
+class JobCompareItem(BaseModel):
+    job_submission_id: int
+    job_title: Optional[str] = None
+    company_name: Optional[str] = None
+    extracted_skills: Optional[dict] = None
+    skill_gap_summary: Optional[dict] = None
+    overall_gap_severity: str = "medium"
+
+
+class JobCompareResponse(BaseModel):
+    job_1: JobCompareItem
+    job_2: JobCompareItem

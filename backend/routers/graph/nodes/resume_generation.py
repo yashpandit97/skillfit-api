@@ -4,7 +4,6 @@ Resume Generation Node: generate ATS-friendly resume content with deficiency mar
 import logging
 import json
 from backend.routers.graph.state import ResumeWorkflowState
-from backend.services.ollama_llm_service import get_llm_service
 from backend.services.resume_builder import build_resume_structured
 from backend.config import get_settings
 
@@ -29,13 +28,14 @@ def resume_generation_node(state: ResumeWorkflowState) -> dict:
         }
 
     try:
-        # Use resume_builder service to produce structured resume (dict compatible with ResumeStructured)
+        user_baseline = state.get("user_baseline")
         structured = build_resume_structured(
             extracted_skills=extracted,
             evaluation_result=evaluation,
             skill_gap_summary=skill_gap,
             user_answers=user_answers,
             max_pages=get_settings().resume_max_pages,
+            user_baseline=user_baseline,
         )
         return {
             "resume_structured": structured,

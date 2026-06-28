@@ -6,12 +6,12 @@ Centralized LLM service. All LLM calls must go through this layer.
 """
 import json
 import logging
+import re
 import time
 from typing import Any
 
-from langchain_ollama import ChatOllama
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_core.output_parsers import JsonOutputParser
 from pydantic import BaseModel
 
 from backend.config import get_settings
@@ -45,26 +45,42 @@ def _approx_tokens(text: str) -> int:
     return max(1, len(text) // 4)
 
 
-class OllamaLLMService:
+def _is_rate_limit_error(exc: Exception) -> bool:
+    msg = str(exc)
+    return "429" in msg or "RESOURCE_EXHAUSTED" in msg
+
+
+def _rate_limit_wait_seconds(exc: Exception, attempt: int) -> float:
+    """Parse RetryInfo from Gemini error, else exponential backoff."""
+    msg = str(exc)
+    match = re.search(r"retry in ([\d.]+)s", msg, re.IGNORECASE)
+    if match:
+        return float(match.group(1)) + 0.5
+    return min(60.0, 2.0 ** attempt)
+
+
+class GeminiLLMService:
     """
-    Pluggable Ollama client. Model and URL from config.
+    Pluggable Gemini client. Model and API key from config.
     """
 
     def __init__(
         self,
-        base_url: str | None = None,
+        api_key: str | None = None,
         model: str | None = None,
         timeout_seconds: int | None = None,
         max_retries: int | None = None,
     ):
         s = get_settings()
-        self.base_url = base_url or s.ollama_base_url
-        self.model = model or s.ollama_model
-        self.timeout = timeout_seconds or s.ollama_timeout_seconds
-        self.max_retries = max_retries or s.ollama_max_retries
-        self._client = ChatOllama(
-            base_url=self.base_url,
+        self.api_key = api_key or s.gemini_api_key
+        if not self.api_key:
+            raise ValueError("GEMINI_API_KEY is required")
+        self.model = model or s.gemini_model
+        self.timeout = timeout_seconds or s.gemini_timeout_seconds
+        self.max_retries = max_retries or s.gemini_max_retries
+        self._client = ChatGoogleGenerativeAI(
             model=self.model,
+            google_api_key=self.api_key,
             timeout=self.timeout,
         )
 
@@ -100,6 +116,17 @@ class OllamaLLMService:
                 return content
             except Exception as e:
                 last_error = e
+                if _is_rate_limit_error(e) and attempt < self.max_retries - 1:
+                    wait = _rate_limit_wait_seconds(e, attempt)
+                    logger.warning(
+                        "LLM rate limited (attempt %s/%s), retrying in %.1fs: %s",
+                        attempt + 1,
+                        self.max_retries,
+                        wait,
+                        e,
+                    )
+                    time.sleep(wait)
+                    continue
                 logger.warning("LLM attempt %s/%s failed: %s", attempt + 1, self.max_retries, e)
         raise last_error or RuntimeError("LLM invocation failed")
 
@@ -152,21 +179,37 @@ class OllamaLLMService:
         stage: str = "llm_stream",
     ):
         """Stream LLM response token-by-token. Yields content chunks (strings)."""
-        from langchain_core.messages import HumanMessage, SystemMessage
-
         messages = [
             SystemMessage(content=system_prompt),
             HumanMessage(content=user_prompt),
         ]
-        for chunk in self._client.stream(messages):
-            content = chunk.content if hasattr(chunk, "content") else str(chunk)
-            if content:
-                yield content
+        last_error: Exception | None = None
+        for attempt in range(self.max_retries):
+            try:
+                for chunk in self._client.stream(messages):
+                    content = chunk.content if hasattr(chunk, "content") else str(chunk)
+                    if content:
+                        yield content
+                return
+            except Exception as e:
+                last_error = e
+                if _is_rate_limit_error(e) and attempt < self.max_retries - 1:
+                    wait = _rate_limit_wait_seconds(e, attempt)
+                    logger.warning(
+                        "LLM stream rate limited (attempt %s/%s), retrying in %.1fs",
+                        attempt + 1,
+                        self.max_retries,
+                        wait,
+                    )
+                    time.sleep(wait)
+                    continue
+                raise
+        raise last_error or RuntimeError("LLM stream failed")
 
 
 def get_llm_service(
-    base_url: str | None = None,
+    api_key: str | None = None,
     model: str | None = None,
-) -> OllamaLLMService:
+) -> GeminiLLMService:
     """Factory for dependency injection. Use config defaults."""
-    return OllamaLLMService(base_url=base_url, model=model)
+    return GeminiLLMService(api_key=api_key, model=model)

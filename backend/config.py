@@ -11,16 +11,19 @@ class Settings(BaseSettings):
     app_name: str = "AI Resume Intelligence"
     debug: bool = False
 
-    # Ollama — pluggable; do not hardcode model in routes
-    ollama_base_url: str = "http://localhost:11434"
-    ollama_model: str = os.getenv("OLLAMA_MODEL", "llama3.2")
-    ollama_timeout_seconds: int = 120
-    ollama_max_retries: int = 3
+    # Gemini — pluggable; do not hardcode model in routes
+    gemini_api_key: str = os.getenv("GEMINI_API_KEY", "")
+    gemini_model: str = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    gemini_timeout_seconds: int = 120
+    gemini_max_retries: int = 3
 
     # JWT
     jwt_secret: str = os.getenv("JWT_SECRET", "change-me-in-production")
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 60 * 24 * 7  # 7 days
+
+    # Firebase Auth (ID token verification)
+    firebase_project_id: str = os.getenv("FIREBASE_PROJECT_ID", "skillfit-e06fe")
 
     # Database — default SQLite for local dev (no PostgreSQL required); set DATABASE_URL for PostgreSQL
     database_url: str = os.getenv(

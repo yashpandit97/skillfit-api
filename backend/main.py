@@ -12,7 +12,7 @@ from fastapi.exceptions import RequestValidationError
 from backend.config import get_settings
 from backend.utils.logging_config import setup_logging
 from backend.utils.errors import AppError, app_error_handler, validation_exception_handler, generic_exception_handler
-from backend.routers import auth, job, questionnaire, skill_gap, resume
+from backend.routers import auth, job, questionnaire, skill_gap, resume, profile, interview_prep
 
 # Rate limit: in-memory for simplicity (use Redis in production)
 from collections import defaultdict
@@ -32,15 +32,18 @@ def _rate_limit_key(request: Request) -> str:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     setup_logging(debug=get_settings().debug)
-    from backend.db.seed import seed_admin_user
     from backend.db.session import engine
     from backend.db.session import Base
-    from backend.db.session import ensure_current_stage_column
+    from backend.db.session import ensure_current_stage_column, ensure_company_name_column, ensure_resume_version_pdf_column, ensure_fit_report_columns, ensure_firebase_uid_column, ensure_firebase_uid_column
     # Create tables if using SQLite (local dev); safe no-op if they exist
     if get_settings().database_url.startswith("sqlite"):
+        from backend.models import UserProfile, ShareToken  # ensure tables registered
         Base.metadata.create_all(bind=engine)
     ensure_current_stage_column(engine)
-    seed_admin_user()
+    ensure_company_name_column(engine)
+    ensure_resume_version_pdf_column(engine)
+    ensure_fit_report_columns(engine)
+    ensure_firebase_uid_column(engine)
     yield
     # shutdown: close db pools, etc.
 
@@ -76,6 +79,8 @@ app.include_router(job.router, prefix="/api")
 app.include_router(questionnaire.router, prefix="/api")
 app.include_router(skill_gap.router, prefix="/api")
 app.include_router(resume.router, prefix="/api")
+app.include_router(profile.router, prefix="/api")
+app.include_router(interview_prep.router, prefix="/api")
 
 
 @app.get("/health")

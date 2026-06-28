@@ -21,3 +21,7 @@ class UserResponse(BaseModel):
 class Token(BaseModel):
     access_token: str
     token_type: str = "bearer"
+
+
+class FirebaseLoginRequest(BaseModel):
+    id_token: str

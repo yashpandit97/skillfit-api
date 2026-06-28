@@ -74,6 +74,7 @@ class SkillAreaScoreSchema(BaseModel):
     area: str
     score: int  # 0-100
     missing_concepts: list[str] = Field(default_factory=list)
+    partial_concepts: list[str] = Field(default_factory=list)  # a_bit answers
     strong_areas: list[str] = Field(default_factory=list)
     recommendation: Optional[str] = None
 
@@ -94,7 +95,11 @@ class ResumeRiskClaimSchema(BaseModel):
 class StudyUrlsSchema(BaseModel):
     """Study materials for one weakness or improvement suggestion."""
     websites: list[str] = Field(default_factory=list, description="1-2 quality article or documentation URLs")
+<<<<<<< HEAD
     youtube: list[str] = Field(default_factory=list, description="1-2 YouTube search URLs (results?search_query=...) so links stay valid")
+=======
+    youtube: list[str] = Field(default_factory=list, description="Deprecated; always empty (no video links)")
+>>>>>>> 1aa7648 (deployment changes + bug fixes)
 
 
 class WeaknessItemSchema(BaseModel):
@@ -112,3 +117,20 @@ class SkillGapSchema(BaseModel):
     improvement_suggestions: list[ImprovementItemSchema] = Field(default_factory=list)
     resume_risk_claims: list[ResumeRiskClaimSchema] = Field(default_factory=list)
     overall_gap_severity: str = "medium"
+
+
+# --- Fit report (resume + JD analysis without questionnaire) ---
+class FitReportItemSchema(BaseModel):
+    topic: str
+    detail: str
+    study_urls: list[str] = Field(default_factory=list)
+
+
+class FitReportSchema(BaseModel):
+    overall_fit_score: int = Field(ge=0, le=100)
+    role_readiness_summary: str
+    strengths: list[str] = Field(default_factory=list)
+    gaps: list[str] = Field(default_factory=list)
+    preparation_plan: list[FitReportItemSchema] = Field(default_factory=list)
+    ats_keywords_matched: list[str] = Field(default_factory=list)
+    ats_keywords_missing: list[str] = Field(default_factory=list)

@@ -10,7 +10,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Callable
 
 from backend.routers.graph.state import ResumeWorkflowState
-from backend.services.ollama_llm_service import get_llm_service
+from backend.services.gemini_llm_service import get_llm_service
 from backend.routers.graph.schemas import QuestionnaireSchema, QuestionnaireItemSchema
 
 logger = logging.getLogger(__name__)
