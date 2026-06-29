@@ -3,6 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    image: skillfit-api-backend
     restart: unless-stopped
     expose:
       - "8000"
