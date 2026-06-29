@@ -5,6 +5,8 @@ services:
       dockerfile: Dockerfile
     image: skillfit-api-backend
     restart: unless-stopped
+    ports:
+      - "8000:8000"
     expose:
       - "8000"
     environment:
