@@ -1,0 +1,121 @@
+name: Deploy API
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-skillfit-api
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: "3.11"
+  DEPLOY_PATH: /home/ec2-user/skillfit-api
+
+jobs:
+  test:
+    name: Run tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r backend/requirements.txt
+
+      - name: Pytest
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+          JWT_SECRET: ci-test-secret
+          DATABASE_URL: sqlite:///./test.db
+          GEMINI_API_KEY: test-key
+        run: pytest backend/tests -q
+
+  build:
+    name: Build Docker image
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          push: false
+          load: true
+          tags: skillfit-api:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    name: Deploy to EC2
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    environment: production
+    steps:
+      - name: Validate deploy secrets
+        run: |
+          test -n "${{ secrets.EC2_HOST }}" || { echo "Missing EC2_HOST secret"; exit 1; }
+          test -n "${{ secrets.EC2_USER }}" || { echo "Missing EC2_USER secret"; exit 1; }
+          test -n "${{ secrets.EC2_SSH_KEY }}" || { echo "Missing EC2_SSH_KEY secret"; exit 1; }
+
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          EC2_DEPLOY_PATH: ${{ secrets.EC2_DEPLOY_PATH }}
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script_stop: true
+          envs: EC2_DEPLOY_PATH
+          script: |
+            set -euo pipefail
+            DEPLOY_PATH="${EC2_DEPLOY_PATH:-/home/ec2-user/skillfit-api}"
+
+            if [ ! -d "$DEPLOY_PATH/.git" ]; then
+              echo "Deploy path $DEPLOY_PATH is not a git repo."
+              echo "On EC2, run: git clone https://github.com/yashpandit97/skillfit-api.git $DEPLOY_PATH"
+              exit 1
+            fi
+
+            cd "$DEPLOY_PATH"
+            git fetch origin main
+            git reset --hard origin/main
+
+            docker compose -f docker-compose.yaml build backend
+            docker compose -f docker-compose.yaml up -d backend
+
+            echo "Waiting for backend health check..."
+            for i in $(seq 1 30); do
+              if docker compose -f docker-compose.yaml exec -T backend python -c \
+                "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"; then
+                echo "Backend is healthy."
+                docker compose -f docker-compose.yaml ps
+                exit 0
+              fi
+              sleep 5
+            done
+
+            echo "Backend failed health check."
+            docker compose -f docker-compose.yaml logs --tail=100 backend
+            exit 1
