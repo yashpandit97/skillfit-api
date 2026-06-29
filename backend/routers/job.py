@@ -376,8 +376,6 @@ def _sse_message(event: str, data: dict | list) -> str:
     return f"event: {event}\ndata: {json.dumps(data)}\n\n"
 
 
-<<<<<<< HEAD
-=======
 def _baseline_has_content(baseline: dict | None) -> bool:
     """True if user has resume text or meaningful profile for fit report."""
     if not baseline:
@@ -394,7 +392,6 @@ def _baseline_has_content(baseline: dict | None) -> bool:
     return bool(skills or exp or raw)
 
 
->>>>>>> 1aa7648 (deployment changes + bug fixes)
 def _run_job_input_stream_to_queue(
     user_id: int,
     job_title: str | None,
@@ -416,15 +413,6 @@ def _run_job_input_stream_to_queue(
             db.refresh(submission)
             queue.put({"type": "started", "job_submission_id": submission.id, "progress_pct": 0})
             queue.put({"type": "progress", "phase": "input", "progress_pct": 5})
-<<<<<<< HEAD
-
-            initial: ResumeWorkflowState = {
-                "job_title": job_title,
-                "job_description_raw": job_description,
-                "user_id": user_id,
-                "job_submission_id": submission.id,
-                "retry_count": 0,
-=======
             baseline = get_user_baseline(db, user_id)
             initial: ResumeWorkflowState = {
                 "job_title": job_title,
@@ -434,7 +422,6 @@ def _run_job_input_stream_to_queue(
                 "job_submission_id": submission.id,
                 "retry_count": 0,
                 "user_baseline": baseline,
->>>>>>> 1aa7648 (deployment changes + bug fixes)
             }
             state = dict(initial)
             state.update(input_normalization_node(state))
@@ -520,27 +507,17 @@ def _run_stage_answers_to_queue(
             if not stage_questions:
                 queue.put({"type": "error", "detail": f"No questions for stage {stage}"})
                 return
-<<<<<<< HEAD
-            allowed = {"yes", "no"}
-=======
             from backend.models.schemas.job import VALID_ANSWER_VALUES
             allowed = VALID_ANSWER_VALUES
->>>>>>> 1aa7648 (deployment changes + bug fixes)
             stage_answers = {}
             for q in stage_questions:
                 qid = q.get("id")
                 val = (answers or {}).get(qid)
                 if val is None or (isinstance(val, str) and val.strip() == ""):
                     val = "no"
-<<<<<<< HEAD
-                normalized = str(val).strip().lower() if val else "no"
-                if normalized not in allowed:
-                    queue.put({"type": "error", "detail": f"Answer for '{qid}' must be 'yes' or 'no'"})
-=======
                 normalized = str(val).strip().lower().replace(" ", "_") if val else "no"
                 if normalized not in allowed:
                     queue.put({"type": "error", "detail": f"Answer for '{qid}' must be 'yes', 'no', or 'a_bit'"})
->>>>>>> 1aa7648 (deployment changes + bug fixes)
                     return
                 stage_answers[qid] = normalized
             existing = submission.user_answers or {}
@@ -551,11 +528,7 @@ def _run_stage_answers_to_queue(
             next_stage = stage + 1
             yes_questions = [
                 q for q in stage_questions
-<<<<<<< HEAD
-                if (merged.get(q.get("id")) or "").strip().lower() == "yes"
-=======
                 if (merged.get(q.get("id")) or "").strip().lower() in ("yes", "a_bit")
->>>>>>> 1aa7648 (deployment changes + bug fixes)
             ]
 
             def on_progress(phase: str, progress_pct: int) -> None:
@@ -808,11 +781,7 @@ def job_input_stream(
 
             yield _sse_message("started", {"job_submission_id": submission.id})
             yield _sse_message("progress", {"progress_pct": 0, "phase": "start"})
-<<<<<<< HEAD
-
-=======
             baseline = get_user_baseline(db, user_id)
->>>>>>> 1aa7648 (deployment changes + bug fixes)
             initial: ResumeWorkflowState = {
                 "job_title": job_title,
                 "job_description_raw": job_description,

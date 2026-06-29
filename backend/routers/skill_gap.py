@@ -18,11 +18,7 @@ router = APIRouter(prefix="/gap", tags=["skill_gap"])
 
 
 class StudyUrls(BaseModel):
-<<<<<<< HEAD
-    """Study materials: websites and YouTube URLs for one weakness or suggestion."""
-=======
     """Study materials: article and documentation URLs only."""
->>>>>>> 1aa7648 (deployment changes + bug fixes)
     websites: list[str] = Field(default_factory=list)
     youtube: list[str] = Field(default_factory=list)
 
@@ -51,11 +47,7 @@ def _normalize_gap_items(raw_list: list) -> list[dict]:
                 su = {}
             out.append({
                 "text": x.get("text", ""),
-<<<<<<< HEAD
-                "study_urls": {"websites": list(su.get("websites") or []), "youtube": list(su.get("youtube") or [])},
-=======
                 "study_urls": sanitize_study_urls(su),
->>>>>>> 1aa7648 (deployment changes + bug fixes)
             })
         else:
             out.append({"text": "", "study_urls": {"websites": [], "youtube": []}})

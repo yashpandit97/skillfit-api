@@ -54,15 +54,6 @@ def _run_submit_to_queue(
             if len(submission.questionnaire) < min_questions:
                 queue.put({"type": "error", "detail": f"Answer at least {min_questions} questions first"})
                 return
-<<<<<<< HEAD
-            allowed = {"yes", "no"}
-            for qid, val in (answers or {}).items():
-                if val is not None and str(val).strip().lower() not in allowed:
-                    queue.put({"type": "error", "detail": f"Answer for '{qid}' must be 'yes' or 'no'"})
-                    return
-
-            config = {"configurable": {"thread_id": str(submission.id)}}
-=======
             from backend.models.schemas.job import VALID_ANSWER_VALUES
             allowed = VALID_ANSWER_VALUES
             for qid, val in (answers or {}).items():
@@ -72,25 +63,18 @@ def _run_submit_to_queue(
 
             config = {"configurable": {"thread_id": str(submission.id)}}
             baseline = get_user_baseline(db, user_id)
->>>>>>> 1aa7648 (deployment changes + bug fixes)
             initial: ResumeWorkflowState = {
                 "job_submission_id": submission.id,
                 "user_id": user_id,
                 "job_title": submission.job_title,
                 "job_description_raw": submission.job_description_raw,
-<<<<<<< HEAD
-=======
                 "company_name": getattr(submission, "company_name", None),
->>>>>>> 1aa7648 (deployment changes + bug fixes)
                 "normalized_description": submission.normalized_input,
                 "extracted_skills": submission.extracted_skills,
                 "questionnaire": submission.questionnaire,
                 "user_answers": answers,
                 "retry_count": 0,
-<<<<<<< HEAD
-=======
                 "user_baseline": baseline,
->>>>>>> 1aa7648 (deployment changes + bug fixes)
             }
             queue.put({"type": "progress", "progress_pct": 15})
 
@@ -123,8 +107,6 @@ def _run_submit_to_queue(
                 db.commit()
 
             if result.get("resume_structured") and result.get("docx_path"):
-<<<<<<< HEAD
-=======
                 from pathlib import Path
                 from backend.services.resume_builder import render_resume_pdf
                 from backend.models.schemas.resume import ResumeStructured
@@ -136,17 +118,11 @@ def _run_submit_to_queue(
                     )
                     .count()
                 ) + 1
->>>>>>> 1aa7648 (deployment changes + bug fixes)
                 rv = ResumeVersion(
                     user_id=user_id,
                     job_submission_id=submission.id,
                     content_json=json.dumps(result["resume_structured"]) if isinstance(result["resume_structured"], dict) else result["resume_structured"],
                     file_path=result["docx_path"],
-<<<<<<< HEAD
-                )
-                db.add(rv)
-                db.commit()
-=======
                     version=next_ver,
                 )
                 db.add(rv)
@@ -159,7 +135,6 @@ def _run_submit_to_queue(
                     db.commit()
                 except Exception as e:
                     logger.warning("PDF generation failed: %s", e)
->>>>>>> 1aa7648 (deployment changes + bug fixes)
 
             eval_result = result.get("evaluation_result") or {}
             queue.put({"type": "progress", "progress_pct": 100})

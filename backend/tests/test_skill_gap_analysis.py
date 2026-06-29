@@ -28,11 +28,7 @@ def test_skill_gap_analysis_aggregates_result(mock_llm_service):
     assert "overall_gap_severity" in summary
     assert summary["weaknesses"][0]["text"] == "Weak in testing"
     assert summary["weaknesses"][0]["study_urls"]["websites"] == ["https://example.com"]
-<<<<<<< HEAD
-    assert summary["improvement_suggestions"][0]["study_urls"]["youtube"] == ["https://youtube.com/watch?v=1"]
-=======
     assert summary["improvement_suggestions"][0]["study_urls"]["youtube"] == []
->>>>>>> 1aa7648 (deployment changes + bug fixes)
 
 
 def test_skill_gap_analysis_no_evaluation():

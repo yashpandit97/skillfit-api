@@ -95,11 +95,7 @@ class ResumeRiskClaimSchema(BaseModel):
 class StudyUrlsSchema(BaseModel):
     """Study materials for one weakness or improvement suggestion."""
     websites: list[str] = Field(default_factory=list, description="1-2 quality article or documentation URLs")
-<<<<<<< HEAD
-    youtube: list[str] = Field(default_factory=list, description="1-2 YouTube search URLs (results?search_query=...) so links stay valid")
-=======
     youtube: list[str] = Field(default_factory=list, description="Deprecated; always empty (no video links)")
->>>>>>> 1aa7648 (deployment changes + bug fixes)
 
 
 class WeaknessItemSchema(BaseModel):
