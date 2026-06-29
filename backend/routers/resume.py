@@ -38,6 +38,16 @@ class ResumePreviewResponse(BaseModel):
     docx_path: str | None
 
 
+class ShareRequest(BaseModel):
+    job_submission_id: int
+    email: str | None = None
+
+
+class ShareResponse(BaseModel):
+    share_url: str
+    expires_at: str
+
+
 @router.get("/preview/{job_submission_id}", response_model=ResumePreviewResponse)
 def resume_preview(
     job_submission_id: int,
@@ -277,16 +287,6 @@ def get_tailored_summary(
     raw = llm.invoke(system, user, stage="tailored_summary")
     one_liner = (raw or "").strip().strip('"').strip("'")
     return {"one_liner": one_liner[:500]}
-
-
-class ShareRequest(BaseModel):
-    job_submission_id: int
-    email: str | None = None
-
-
-class ShareResponse(BaseModel):
-    share_url: str
-    expires_at: str
 
 
 @router.post("/share", response_model=ShareResponse)
